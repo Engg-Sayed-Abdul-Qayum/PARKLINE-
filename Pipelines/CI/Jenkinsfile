@@ -47,17 +47,21 @@ pipeline {
         }
 
         stage('Code Checking') {
-            steps {
-                sh '''
-                    echo "Checking project structure..."
+    steps {
+        dir('app') {
+            sh '''
+                echo "Checking PARKLINE project structure..."
 
-                    test -f index.html
-                    test -f Dockerfile
+                test -f index.html
+                test -f Dockerfile
+                test -f README.txt
 
-                    echo "Required files found."
-                '''
-            }
+                echo "All required files found."
+                ls -la
+            '''
         }
+    }
+}
 
         stage('Code Validation') {
             steps {
