@@ -1,5 +1,185 @@
+// pipeline {
+//     agent any 
+
+//     options {
+//         skipDefaultCheckout(true)
+//         timestamps()
+//     }
+
+//     environment {
+//         // AWS configuration
+//         AWS_REGION = 'us-east-1'
+//         ECR_REPOSITORY = 'tca-project'
+
+//         // Docker configuration
+//         IMAGE_TAG = 'latest'
+//         IMAGE_NAME = 'parking-game'
+
+//         // GitHub configuration
+//         REPO_URL = 'https://github.com/Engg-Sayed-Abdul-Qayum/PARKLINE-.git'
+//     }
+
+//     stages {
+
+//         stage('Clone Repository') {
+//             steps {
+//                 dir('app') {
+//                     deleteDir()
+
+//                     sh '''
+//                         set -eu
+
+//                         echo "Cloning application repository..."
+
+//                         git clone \
+//                             --branch "$BRANCH" \
+//                             "$REPO_URL" .
+
+//                         echo "Repository cloned successfully."
+//                     '''
+//                 }
+//             }
+//         }
+
+//         stage('Docker Image Build') {
+//             steps {
+//                 sh '''
+//                     echo "Building PARKLINE Docker image..."
+
+//                     docker build \
+//                         -t ${IMAGE_NAME}:${IMAGE_TAG} \
+//                         -t ${IMAGE_NAME}:latest .
+
+//                     echo "Docker image created successfully."
+//                 '''
+//             }
+//         }
+
+//         stage('Publish to AWS ECR') {
+//             environment {
+//                 AWS_Access_Key_ID = credentials('AWS_ACCESS_KEY_ID')
+//                 AWS_Secret_Access_Key = credentials('AWS_SECRET_ACCESS_KEY')
+//             }
+
+//             stages {
+
+//                 stage('AWS Authentication') {
+//                     steps {
+//                         script {
+//                             env.AWS_ACCOUNT_ID = sh(
+//                                 script: '''
+//                                     aws sts get-caller-identity \
+//                                         --query Account \
+//                                         --output text
+//                                 ''',
+//                                 returnStdout: true
+//                             ).trim()
+
+//                             echo "AWS authentication successful."
+//                             echo "AWS Account: ${env.AWS_ACCOUNT_ID}"
+//                             echo "AWS Region: ${env.AWS_REGION}"
+//                         }
+//                         sh '''
+//                             set -eu
+
+//                             echo "Checking ECR repository..."
+
+//                             aws ecr describe-repositories \
+//                                 --repository-names "$ECR_REPOSITORY" \
+//                                 --region "$AWS_REGION" > /dev/null
+
+//                             echo "ECR repository found."
+
+//                             echo "Logging in to Amazon ECR..."
+
+//                             aws ecr get-login-password \
+//                                 --region "$AWS_REGION" |
+//                             docker login \
+//                                 --username AWS \
+//                                 --password-stdin \
+//                                 "$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
+
+//                             echo "ECR login successful."
+//                         '''
+//                     }
+//                 }
+
+//                 stage('Tag Docker Image') {
+//                     steps {
+//                         sh '''
+//                             set -eu
+
+//                             ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+//                             docker tag \
+//                                 "$DOCKER_IMAGE:$IMAGE_TAG" \
+//                                 "$ECR_URI/$ECR_REPOSITORY:$IMAGE_TAG"
+
+//                             echo "Docker image tagged successfully."
+//                         '''
+//                     }
+//                 }
+
+//                 stage('Push Image to AWS ECR') {
+//                     steps {
+//                         sh '''
+//                             set -eu
+
+//                             ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+//                             echo "Pushing Docker image to ECR..."
+
+//                             docker push \
+//                                 "$ECR_URI/$ECR_REPOSITORY:$IMAGE_TAG"
+
+//                             echo "Docker image push successful."
+//                         '''
+//                     }
+//                 }
+
+//                 stage('Verify AWS ECR Repository') {
+//                     steps {
+//                         sh '''
+//                             set -eu
+
+//                             aws ecr describe-images \
+//                                 --repository-name "$ECR_REPOSITORY" \
+//                                 --image-ids imageTag="$IMAGE_TAG" \
+//                                 --region "$AWS_REGION"
+
+//                             echo "Image successfully verified in ECR."
+//                         '''
+//                     }
+//                 }
+//             }
+//         }
+
+//         post {
+//             success {
+//                 echo '================================'
+//                 echo '      CD PIPELINE SUCCESS'
+//                 echo '      IMAGE PUSH SUCCESS'
+//                 echo '================================'
+//                 echo "ECR Image: ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
+//             }
+//             failure {
+//                 echo '================================'
+//                 echo '      CD PIPELINE FAILURE'
+//                 echo '      IMAGE PUSH FAILURE'
+//                 echo '================================'
+//             }
+//             always {
+//                 echo "CD pipeline Result: ${currentBuild.currentResult}"
+//             }
+//         }
+//     }
+
+
+
+
+
 pipeline {
-    agent any 
+    agent any
 
     options {
         skipDefaultCheckout(true)
@@ -17,6 +197,7 @@ pipeline {
 
         // GitHub configuration
         REPO_URL = 'https://github.com/Engg-Sayed-Abdul-Qayum/PARKLINE-.git'
+        BRANCH = 'main'
     }
 
     stages {
@@ -29,7 +210,7 @@ pipeline {
                     sh '''
                         set -eu
 
-                        echo "Cloning application repository..."
+                        echo "Cloning PARKLINE repository..."
 
                         git clone \
                             --branch "$BRANCH" \
@@ -43,22 +224,29 @@ pipeline {
 
         stage('Docker Image Build') {
             steps {
-                sh '''
-                    echo "Building PARKLINE Docker image..."
+                dir('app') {
+                    sh '''
+                        set -eu
 
-                    docker build \
-                        -t ${IMAGE_NAME}:${IMAGE_TAG} \
-                        -t ${IMAGE_NAME}:latest .
+                        echo "Building PARKLINE Docker image..."
 
-                    echo "Docker image created successfully."
-                '''
+                        docker build \
+                            -t "$IMAGE_NAME:$IMAGE_TAG" \
+                            -t "$IMAGE_NAME:$BUILD_NUMBER" .
+
+                        echo "Docker image created successfully."
+
+                        docker images "$IMAGE_NAME"
+                    '''
+                }
             }
         }
 
         stage('Publish to AWS ECR') {
+
             environment {
-                AWS_Access_Key_ID = credentials('AWS_ACCESS_KEY_ID')
-                AWS_Secret_Access_Key = credentials('AWS_SECRET_ACCESS_KEY')
+                AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
+                AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
             }
 
             stages {
@@ -79,6 +267,7 @@ pipeline {
                             echo "AWS Account: ${env.AWS_ACCOUNT_ID}"
                             echo "AWS Region: ${env.AWS_REGION}"
                         }
+
                         sh '''
                             set -eu
 
@@ -111,8 +300,10 @@ pipeline {
 
                             ECR_URI="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
+                            echo "Tagging Docker image..."
+
                             docker tag \
-                                "$DOCKER_IMAGE:$IMAGE_TAG" \
+                                "$IMAGE_NAME:$IMAGE_TAG" \
                                 "$ECR_URI/$ECR_REPOSITORY:$IMAGE_TAG"
 
                             echo "Docker image tagged successfully."
@@ -142,6 +333,8 @@ pipeline {
                         sh '''
                             set -eu
 
+                            echo "Verifying uploaded image..."
+
                             aws ecr describe-images \
                                 --repository-name "$ECR_REPOSITORY" \
                                 --image-ids imageTag="$IMAGE_TAG" \
@@ -153,23 +346,27 @@ pipeline {
                 }
             }
         }
+    }
 
-        post {
-            success {
-                echo '================================'
-                echo '      CD PIPELINE SUCCESS'
-                echo '      IMAGE PUSH SUCCESS'
-                echo '================================'
-                echo "ECR Image: ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
-            }
-            failure {
-                echo '================================'
-                echo '      CD PIPELINE FAILURE'
-                echo '      IMAGE PUSH FAILURE'
-                echo '================================'
-            }
-            always {
-                echo "CD pipeline Result: ${currentBuild.currentResult}"
-            }
+    post {
+        success {
+            echo '================================'
+            echo '       CD PIPELINE SUCCESS'
+            echo '       IMAGE PUSH SUCCESS'
+            echo '================================'
+
+            echo "ECR Image: ${env.AWS_ACCOUNT_ID}.dkr.ecr.${env.AWS_REGION}.amazonaws.com/${env.ECR_REPOSITORY}:${env.IMAGE_TAG}"
+        }
+
+        failure {
+            echo '================================'
+            echo '       CD PIPELINE FAILURE'
+            echo '       IMAGE PUSH FAILURE'
+            echo '================================'
+        }
+
+        always {
+            echo "CD pipeline Result: ${currentBuild.currentResult}"
         }
     }
+}
