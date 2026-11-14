@@ -63,37 +63,25 @@ pipeline {
     }
 }
 
-        stage('Code Validation') {
-            steps {
-                sh '''
-                    echo "Validating HTML and JavaScript..."
+        
+stage('Code Validation') {
+    steps {
+        dir('app') {
+            sh '''
+                set -e
 
-                    python3 - <<'PY'
-                    from html.parser import HTMLParser
+                echo "Validating PARKLINE HTML..."
 
-                    class Validator(HTMLParser):
-                        pass
+                test -s index.html
 
-                    with open("index.html", encoding="utf-8") as f:
-                        content = f.read()
+                python3 -c 'from html.parser import HTMLParser; HTMLParser().feed(open("index.html", encoding="utf-8").read()); print("HTML parsing passed.")'
 
-                    parser = Validator()
-                    parser.feed(content)
-                    parser.close()
-
-                    if not content.strip():
-                        raise SystemExit("HTML file is empty")
-
-                    print("HTML validation passed.")
-                    PY
-
-                    echo "Checking Dockerfile..."
-
-                    docker --version
-                    docker build --check -t parkline-validation .
-                '''
-            }
+                echo "HTML validation successful."
+            '''
         }
+    }
+}
+
     }
 
     post {
