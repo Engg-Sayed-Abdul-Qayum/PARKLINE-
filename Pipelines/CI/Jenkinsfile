@@ -1,0 +1,119 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        skipDefaultCheckout(true)
+        disableConcurrentBuilds()
+    }
+
+    environment {
+        REPO_URL = 'https://github.com/Engg-Sayed-Abdul-Qayum/PARKLINE-.git'
+        BRANCH = 'main'
+        IMAGE_NAME = 'parkline-parking-game'
+        IMAGE_TAG  = "${BUILD_NUMBER}"
+    }
+
+    stages {
+
+        stage("Jenkins Diagnostic") {
+            steps {
+                sh '''
+                    echo "Jenkins Diagnostic Information:"
+                    echo "--------------------------------"
+                    echo "Jenkins Version: $(jenkins --version)"
+                    echo "=== USER ==="
+                    whoami
+                '''
+
+            }
+        }
+
+        stage('Clone Repository') {
+            steps {
+                dir('app') {
+                    sh '''
+                        if [ -d ".git" ]; then
+                            echo "Repository already exists."
+                            echo "Skipping clone stage."
+                        else
+                            echo "Repository not found."
+                            echo "Cloning repository..."
+                            git clone --branch "$BRANCH" "$REPO_URL" .
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Code Checking') {
+            steps {
+                sh '''
+                    echo "Checking project structure..."
+
+                    test -f index.html
+                    test -f Dockerfile
+
+                    echo "Required files found."
+                '''
+            }
+        }
+
+        stage('Code Validation') {
+            steps {
+                sh '''
+                    echo "Validating HTML and JavaScript..."
+
+                    python3 - <<'PY'
+                    from html.parser import HTMLParser
+
+                    class Validator(HTMLParser):
+                        pass
+
+                    with open("index.html", encoding="utf-8") as f:
+                        content = f.read()
+
+                    parser = Validator()
+                    parser.feed(content)
+                    parser.close()
+
+                    if not content.strip():
+                        raise SystemExit("HTML file is empty")
+
+                    print("HTML validation passed.")
+                    PY
+
+                    echo "Checking Dockerfile..."
+
+                    docker --version
+                    docker build --check -t parkline-validation .
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '''
+            =================================
+                 PARKLINE CI BUILD SUCCESS
+            =================================
+            All pipeline stages build completed successfully.
+            '''
+        }
+
+        failure {
+            echo '''
+            =================================
+                 PARKLINE CI BUILD FAILED
+            =================================
+            Please check the failed stage
+            and Jenkins console output.
+            '''
+        }
+
+        always {
+            echo "PARKLINE CI Pipeline execution finished."
+        }
+    }
+}
